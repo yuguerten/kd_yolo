@@ -1,0 +1,10 @@
+# Ignore images and labels folders
+data/images/
+data/labels/
+
+# Ignore raw data
+raw_data/
+
+# Ignore YOLO annotations
+annotations/
+*.txt

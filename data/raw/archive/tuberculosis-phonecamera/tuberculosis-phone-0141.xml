@@ -1,0 +1,32 @@
+<annotation>
+	<source>
+		<database>Makerere Automated Lab Diagnostics Database</database>
+		<annotation>Makerere University</annotation>
+		<image>Mulago National Referral Hospital</image>
+	</source>
+	<segmented>0</segmented>
+	<object>
+		<label>TBbacillus</label>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<occluded>0</occluded>
+		<bndbox>
+			<xmin>954</xmin>
+			<ymin>451</ymin>
+			<xmax>1064</xmax>
+			<ymax>507</ymax>
+		</bndbox>
+	</object>
+	<object>
+		<label>TBbacillus</label>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<occluded>0</occluded>
+		<bndbox>
+			<xmin>760</xmin>
+			<ymin>333</ymin>
+			<xmax>863</xmax>
+			<ymax>379</ymax>
+		</bndbox>
+	</object>
+</annotation>
