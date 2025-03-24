@@ -21,7 +21,8 @@ kd_yolo/
 ├── train.py            # Training script with argparse
 ├── utils/              # Utility functions
 │   ├── __init__.py
-│   └── data_utils.py   # Dataset preparation utilities
+│   ├── data_utils.py   # Dataset preparation utilities
+│   └── distill.py      # Knowledge distillation functionality
 ├── requirements.txt    # Dependencies
 └── README.md           # Documentation
 ```
@@ -40,6 +41,15 @@ The `train.py` script accepts the following arguments:
 - `--name`: Experiment name (default: exp)
 - `--resume`: Resume training from last checkpoint
 
+### Knowledge Distillation Arguments
+
+For training with knowledge distillation:
+
+- `--distill`: Enable knowledge distillation (flag)
+- `--teacher-model`: Path to the teacher model (required for distillation)
+- `--temperature`: Temperature parameter for distillation (default: 4.0)
+- `--alpha`: Weight for balancing distillation and task loss (default: 0.5)
+
 ## Dataset Format
 
 The dataset should be in YOLO format:
@@ -47,12 +57,39 @@ The dataset should be in YOLO format:
 - labels/ - Contains corresponding .txt label files
 - data.yaml - Dataset configuration (will be created automatically if missing)
 
-## Example Usage
+## Knowledge Distillation
 
-```python
-!python train.py --data-path /content/drive/MyDrive/your_dataset \
-                 --model yolov8n.pt \
-                 --epochs 50 \
-                 --batch-size 16 \
-                 --img-size 640
+Knowledge distillation helps a smaller student model learn from a larger teacher model. This implementation:
+
+1. Uses response-based distillation focused on the output layer
+2. Applies temperature scaling to soften probability distributions
+3. Balances distillation loss with the original detection loss
+
+### Distillation Implementation
+
+Our knowledge distillation approach combines:
+
+- **Soft Target Loss**: KL divergence between the teacher and student predictions
+  - Temperature scaling (T=4.0) softens probability distributions
+  - Higher temperature reveals more dark knowledge from teacher
+- **Hard Target Loss**: Original task loss from labeled data
+- **Combined Loss**: `total_loss = α * soft_target_loss + (1-α) * hard_target_loss`
+  - `α` controls the balance between mimicking the teacher and learning from ground truth
+
+For YOLOv8, we apply distillation to the detection outputs, helping the student model learn the nuanced prediction patterns of the larger teacher model.
+
+### Recommended Model Pairs
+
+- Student: YOLOv8n (Nano) - Teacher: YOLOv8l (Large)
+- Student: YOLOv8s (Small) - Teacher: YOLOv8x (XLarge)
+- Student: YOLOv8m (Medium) - Teacher: YOLOv8x (XLarge)
+
+### Example usage:
+
+```bash
+python train.py --data-path /path/to/dataset --model yolov8s.pt \
+    --distill --teacher-model yolov8x.pt --temperature 4.0 --alpha 0.5 \
+    --epochs 100 --batch-size 16
 ```
+
+This trains a YOLOv8-Small model (student) with knowledge from a YOLOv8-XLarge model (teacher).
