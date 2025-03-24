@@ -5,6 +5,7 @@ from pathlib import Path
 import torch
 from ultralytics import YOLO
 from utils.distill import apply_distillation
+from utils.data_utils import create_data_yaml
 
 
 def parse_args():
@@ -34,65 +35,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def prepare_data_yaml(data_path):
-    """Create data.yaml file if it doesn't exist"""
-    data_yaml_path = os.path.join(data_path, 'data.yaml')
-    
-    if os.path.exists(data_yaml_path):
-        print(f"Using existing data.yaml at {data_yaml_path}")
-        return data_yaml_path
-    
-    # Create data.yaml if it doesn't exist
-    print("Creating data.yaml file...")
-    
-    # Check if images and labels directories exist
-    images_dir = os.path.join(data_path, 'images')
-    labels_dir = os.path.join(data_path, 'labels')
-    
-    if not os.path.exists(images_dir) or not os.path.exists(labels_dir):
-        raise FileNotFoundError(f"Dataset structure not valid. Expected directories: {images_dir}, {labels_dir}")
-    
-    # Count classes by checking all label files
-    classes = set()
-    label_files = Path(labels_dir).glob('*.txt')
-    
-    for label_file in label_files:
-        with open(label_file, 'r') as f:
-            for line in f:
-                if line.strip():
-                    class_id = int(line.split()[0])
-                    classes.add(class_id)
-    
-    num_classes = len(classes)
-    
-    if num_classes == 0:
-        raise ValueError("No classes found in the dataset.")
-    
-    # Create class names as placeholders
-    class_names = [f"class_{i}" for i in range(num_classes)]
-    
-    # Create train/val/test split paths
-    train_dir = os.path.join(images_dir, 'train') if os.path.exists(os.path.join(images_dir, 'train')) else images_dir
-    val_dir = os.path.join(images_dir, 'val') if os.path.exists(os.path.join(images_dir, 'val')) else images_dir
-    
-    # Create the data.yaml content
-    data_dict = {
-        'path': data_path,
-        'train': train_dir,
-        'val': val_dir,
-        'test': '',
-        'nc': num_classes,
-        'names': class_names
-    }
-    
-    # Write data.yaml file
-    with open(data_yaml_path, 'w') as f:
-        yaml.dump(data_dict, f, sort_keys=False)
-    
-    print(f"Created data.yaml at {data_yaml_path} with {num_classes} classes.")
-    return data_yaml_path
-
-
 def train_with_distillation(args):
     """Train the model with knowledge distillation"""
     # Check if teacher model is specified
@@ -100,7 +42,7 @@ def train_with_distillation(args):
         raise ValueError("Teacher model path must be specified for distillation.")
     
     # Prepare data config
-    data_yaml_path = prepare_data_yaml(args.data_path)
+    data_yaml_path = create_data_yaml(args.data_path)
     
     # Load the teacher model
     print(f"Loading teacher model: {args.teacher_model}")
