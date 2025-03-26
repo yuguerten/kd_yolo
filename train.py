@@ -144,7 +144,7 @@ def train_with_distillation(args):
 def train_standard(args):
     """Train the model without knowledge distillation"""
     # Prepare data config
-    data_yaml_path = prepare_data_yaml(args.data_path)
+    data_yaml_path = create_data_yaml(args.data_path)
     
     # Load the model
     print(f"Loading model: {args.model}")
