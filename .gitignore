@@ -1,0 +1,2 @@
+# Ignore training output directory
+/runs/train/yolo_large

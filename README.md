@@ -1,12 +1,13 @@
 # YOLOv8 Training Framework
 
-This repository contains code for training YOLOv8 models on custom datasets using Google Colab.
+This repository contains code for training and distillating (Response Based knwoledge Approach ) YOLOv8 models on [Tuberculosis Image Dataset
+](https://www.kaggle.com/datasets/saife245/tuberculosis-image-datasets) using in google colab.
 
 ## Setup
 
 1. Fork/clone this repository to your GitHub account
-2. Upload your dataset to Google Drive (in YOLO format)
-3. Open the `train_yolov8.ipynb` notebook in Google Colab
+2. Upload your dataset and use `data_utils.py` to prepare the dataset in yolo format
+3. Open a notebook in Google Colab
 4. Follow the steps in the notebook to:
    - Clone your repository
    - Install dependencies
@@ -17,7 +18,9 @@ This repository contains code for training YOLOv8 models on custom datasets usin
 
 ```
 kd_yolo/
-├── train_yolov8.ipynb  # Main Colab notebook
+├── notebooks
+│   ├── data_exploration.ipynb
+│   └── model_performance.ipynb
 ├── train.py            # Training script with argparse
 ├── utils/              # Utility functions
 │   ├── __init__.py
@@ -77,12 +80,6 @@ Our knowledge distillation approach combines:
   - `α` controls the balance between mimicking the teacher and learning from ground truth
 
 For YOLOv8, we apply distillation to the detection outputs, helping the student model learn the nuanced prediction patterns of the larger teacher model.
-
-### Recommended Model Pairs
-
-- Student: YOLOv8n (Nano) - Teacher: YOLOv8l (Large)
-- Student: YOLOv8s (Small) - Teacher: YOLOv8x (XLarge)
-- Student: YOLOv8m (Medium) - Teacher: YOLOv8x (XLarge)
 
 ### Example usage:
 
