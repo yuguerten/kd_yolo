@@ -95,8 +95,7 @@ def train_with_distillation(args):
             metrics = trainer.metrics
             
             # Calculate teacher model performance on validation set
-            val_loader = trainer.validator.dataloader
-            teacher_metrics = self._evaluate_teacher(val_loader)
+            teacher_metrics = self._evaluate_teacher(data_yaml_path)
             
             # Prepare metric values for CSV
             row = [
@@ -119,19 +118,26 @@ def train_with_distillation(args):
                 writer = csv.writer(f)
                 writer.writerow(row)
             
-            print(f"Epoch {epoch}: Student mAP50: {row[1]:.4f}, Teacher mAP50: {row[9]:.4f}, KD Loss: {row[7]:.4f}")
+            print(f"Epoch {epoch}: Student mAP50: {row[1]:.4f}, Teacher mAP50: {row[10]:.4f}, KD Loss: {row[8]:.4f}")
         
-        def _evaluate_teacher(self, dataloader):
-            """Evaluate teacher model on validation set"""
-            metrics = {}
+        def _evaluate_teacher(self, data_yaml_path):
+            """Evaluate teacher model on validation set using the data configuration"""
+            metrics = {'mAP50': 0, 'mAP50-95': 0}
             try:
-                # Run validation on teacher model
-                results = self.teacher_model.val(data=dataloader)
+                # Run validation on teacher model using the data configuration
+                results = self.teacher_model.val(data=data_yaml_path, 
+                                               imgsz=self.args.img_size,
+                                               batch=self.args.batch_size,
+                                               device=self.args.device)
                 # Extract metrics
-                metrics['mAP50'] = results.box.map50
-                metrics['mAP50-95'] = results.box.map
+                if hasattr(results, 'box') and hasattr(results.box, 'map50'):
+                    metrics['mAP50'] = results.box.map50
+                    metrics['mAP50-95'] = results.box.map
+                else:
+                    print("Warning: Teacher model validation didn't return expected metrics format")
             except Exception as e:
-                print(f"Error evaluating teacher model: {e}")
+                print(f"Error evaluating teacher model: {str(e)}")
+                # Continue training despite evaluation error
             
             return metrics
         
