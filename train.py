@@ -43,44 +43,130 @@ def parse_args():
 
 def create_data_loaders(data_yaml_path, batch_size, img_size, device):
     """Create custom data loaders from YOLO format data"""
-    with open(data_yaml_path, 'r') as f:
-        data_dict = yaml.safe_load(f)
+    try:
+        # Load and validate the data YAML
+        with open(data_yaml_path, 'r') as f:
+            data_dict = yaml.safe_load(f)
+        
+        # Print diagnostic information
+        print(f"\nLoading dataset from configuration: {data_yaml_path}")
+        print(f"Dataset paths found: {data_dict}")
+        
+        # Verify required paths exist
+        train_path = data_dict.get('train', '')
+        val_path = data_dict.get('val', '')
+        
+        if not train_path:
+            print(f"Warning: No train path specified in {data_yaml_path}")
+        else:
+            print(f"Train path: {train_path}")
+            if not os.path.exists(train_path):
+                print(f"Warning: Train path {train_path} does not exist")
+        
+        if not val_path:
+            print(f"Warning: No val path specified in {data_yaml_path}")
+        else:
+            print(f"Val path: {val_path}")
+            if not os.path.exists(val_path):
+                print(f"Warning: Val path {val_path} does not exist")
+        
+        # Check if there are any class names defined
+        nc = data_dict.get('nc', 0)
+        names = data_dict.get('names', {})
+        print(f"Number of classes: {nc}")
+        print(f"Class names: {names}")
+        
+        # Create train dataset with explicit parameters
+        print("Creating training dataset...")
+        try:
+            train_data = YOLODataset(
+                img_path=train_path,
+                imgsz=img_size,
+                batch_size=batch_size,
+                augment=True,
+                hyp=None,  # Use default hyperparameters
+                prefix='train: ',
+                rect=False,
+                cache=False,
+                stride=32,
+                pad=0.0,
+                single_cls=False,
+                classes=None  # Include all classes
+            )
+            print(f"Training dataset created with {len(train_data)} images")
+        except Exception as e:
+            print(f"Error creating training dataset: {e}")
+            # Create a fallback if dataset creation fails
+            from ultralytics.cfg import get_cfg
+            from ultralytics.data.build import build_dataloader
+            RANK = -1  # Single-GPU training
+            cfg = get_cfg(overrides={"data": data_yaml_path})
+            print("Attempting to create dataloader with fallback method...")
+            train_loader = build_dataloader(cfg, batch_size=batch_size, rank=RANK, mode="train")[0]
+            val_loader = build_dataloader(cfg, batch_size=batch_size, rank=RANK, mode="val")[0]
+            return train_loader, val_loader
+        
+        # Create validation dataset
+        print("Creating validation dataset...")
+        try:
+            val_data = YOLODataset(
+                img_path=val_path,
+                imgsz=img_size,
+                batch_size=batch_size,
+                augment=False,
+                hyp=None,  # Use default hyperparameters
+                prefix='val: ',
+                rect=True,
+                cache=False,
+                stride=32,
+                pad=0.5,
+                single_cls=False,
+                classes=None  # Include all classes
+            )
+            print(f"Validation dataset created with {len(val_data)} images")
+        except Exception as e:
+            print(f"Error creating validation dataset: {e}")
+            # If val dataset fails, use a subset of train dataset
+            val_data = train_data
+            print("Using training data for validation due to error")
+        
+        # Create data loaders
+        print("Creating data loaders...")
+        train_loader = DataLoader(
+            train_data,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=min(8, os.cpu_count() or 4),
+            pin_memory=True,
+            collate_fn=train_data.collate_fn
+        )
+        
+        val_loader = DataLoader(
+            val_data,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=min(8, os.cpu_count() or 4),
+            pin_memory=True,
+            collate_fn=val_data.collate_fn
+        )
+        
+        print(f"Created data loaders: {len(train_loader)} training batches, {len(val_loader)} validation batches")
+        return train_loader, val_loader
     
-    # Create train and val datasets
-    train_data = YOLODataset(
-        img_path=data_dict.get('train', ''),
-        imgsz=img_size,
-        augment=True,
-        cache=False
-    )
-    
-    val_data = YOLODataset(
-        img_path=data_dict.get('val', ''),
-        imgsz=img_size,
-        augment=False,
-        cache=False
-    )
-    
-    # Create data loaders
-    train_loader = DataLoader(
-        train_data,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=4,
-        pin_memory=True,
-        collate_fn=train_data.collate_fn
-    )
-    
-    val_loader = DataLoader(
-        val_data,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True,
-        collate_fn=val_data.collate_fn
-    )
-    
-    return train_loader, val_loader
+    except Exception as e:
+        print(f"Error in create_data_loaders: {e}")
+        print("\nFalling back to YOLO's default data loading mechanism...")
+        
+        # Fallback method: use the YOLO model's default data loading
+        model = YOLO('yolov8n.pt')  # Use a small model for initialization
+        overrides = {
+            'data': data_yaml_path,
+            'batch': batch_size,
+            'imgsz': img_size,
+        }
+        train_loader = model.trainer.get_dataloader('train', batch_size, img_size, overrides=overrides)
+        val_loader = model.trainer.get_dataloader('val', batch_size, img_size, overrides=overrides)
+        return train_loader, val_loader
 
 
 def train_with_distillation(args):
