@@ -74,6 +74,16 @@ def create_data_loaders(data_yaml_path, batch_size, img_size, device):
         names = data_dict.get('names', {})
         print(f"Number of classes: {nc}")
         print(f"Class names: {names}")
+    
+    # Create train and validation datasets
+    train_dataset = YOLODataset(data_dict['train'], img_size, augment=True)
+    val_dataset = YOLODataset(data_dict['val'], img_size, augment=False)
+    
+    # Create data loaders
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, pin_memory=True)
+    
+    return train_loader, val_loader
 
 
 def train_with_distillation(args):
@@ -99,9 +109,9 @@ def train_with_distillation(args):
     student_pytorch = student_model.model
     student_pytorch.to(device).train()  # Set student to train mode
     
-    # # Create data loaders
-    # print("Creating data loaders...")
-    # train_loader, val_loader = create_data_loaders(data_yaml_path, args.batch_size, args.img_size, device)
+    # Create data loaders
+    print("Creating data loaders...")
+    train_loader, val_loader = create_data_loaders(data_yaml_path, args.batch_size, args.img_size, device)
     
     # Define optimizer
     optimizer = torch.optim.Adam(student_pytorch.parameters(), lr=0.001)
@@ -238,6 +248,23 @@ def train_with_distillation(args):
             
             # Update validation metrics
             metrics.update_validation_metrics(val_metrics)
+            
+            # --- CUSTOM METRICS UPDATE ---
+            custom_metrics = {
+                'Epoch': epoch + 1,
+                'mAP50': val_metrics.get('metrics/mAP50(B)', 0),
+                'mAP50-95': val_metrics.get('metrics/mAP50-95(B)', 0),
+                'Precision': val_metrics.get('metrics/precision(B)', 0),
+                'Recall': val_metrics.get('metrics/recall(B)', 0),
+                'Box Loss': val_metrics.get('val/box_loss', 0),
+                'Cls Loss': val_metrics.get('val/cls_loss', 0),
+                'Obj Loss': val_metrics.get('val/dfl_loss', 0),
+                'KD Loss': loss_dict.get('kd_loss', 0),
+                'Student Loss': student_loss.item(),
+                'Teacher Loss': teacher_val_loss.item()
+            }
+            metrics.update_custom_metrics(custom_metrics)
+            # -------------------------------
         
         # Get current learning rates
         current_lrs = [pg['lr'] for pg in optimizer.param_groups]
@@ -399,6 +426,20 @@ def train_standard(args):
             
             # Update validation metrics
             metrics.update_validation_metrics(val_metrics)
+
+            # --- CUSTOM METRICS UPDATE ---
+            custom_metrics = {
+                'Epoch': epoch + 1,
+                'mAP50': val_metrics.get('metrics/mAP50(B)', 0),
+                'mAP50-95': val_metrics.get('metrics/mAP50-95(B)', 0),
+                'Precision': val_metrics.get('metrics/precision(B)', 0),
+                'Recall': val_metrics.get('metrics/recall(B)', 0),
+                'Box Loss': val_metrics.get('val/box_loss', 0),
+                'Cls Loss': val_metrics.get('val/cls_loss', 0),
+                'Obj Loss': val_metrics.get('val/dfl_loss', 0)
+            }
+            metrics.update_custom_metrics(custom_metrics)
+            # -------------------------------
         
         # Get current learning rates
         current_lrs = [pg['lr'] for pg in optimizer.param_groups]
