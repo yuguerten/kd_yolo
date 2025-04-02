@@ -23,6 +23,7 @@ class MetricsTracker:
         self.current_metrics = {}
         self.best_map50 = 0
         self.epoch_start_time = None
+        self.custom_metrics = {}
         
         # Initialize CSV file with header
         self._initialize_csv()
@@ -73,6 +74,11 @@ class MetricsTracker:
         """Update validation metrics"""
         for k, v in metrics_dict.items():
             self.current_metrics[k] = v
+    
+    def update_custom_metrics(self, custom_metrics):
+        # Store and print custom metrics for logging
+        self.custom_metrics = custom_metrics
+        print("Custom Metrics:", custom_metrics)
     
     def end_epoch(self, epoch, learning_rates):
         """
