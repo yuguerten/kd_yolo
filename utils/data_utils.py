@@ -43,7 +43,7 @@ def create_data_yaml(dataset_path):
         'val': str(dataset_path / 'val' / 'images' if (dataset_path / 'val' / 'images').exists() else dataset_path / 'images'),
         'test': str(dataset_path / 'test' / 'images' if (dataset_path / 'test' / 'images').exists() else ''),
         'names': {i: name for i, name in enumerate(class_names)},
-        'nc': len(class_names)
+        'nc': len(class_names),  
     }
     
     # Write the data.yaml file
@@ -53,19 +53,3 @@ def create_data_yaml(dataset_path):
     
     print(f"Created data.yaml at {yaml_path}")
     return yaml_path
-
-def prepare_colab_dataset(gdrive_path, dataset_name):
-    """
-    Prepare a dataset from Google Drive for training
-    """
-    from google.colab import drive
-    drive.mount('/content/drive')
-    
-    dataset_path = Path(f'/content/drive/MyDrive/{gdrive_path}/{dataset_name}')
-    if not dataset_path.exists():
-        raise FileNotFoundError(f"Dataset not found at {dataset_path}")
-    
-    print(f"Dataset found at {dataset_path}")
-    create_data_yaml(dataset_path)
-    
-    return dataset_path
