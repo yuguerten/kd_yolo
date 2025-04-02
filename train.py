@@ -8,7 +8,7 @@ import time
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from ultralytics import YOLO
-from ultralytics.data.dataset import YOLODataset
+from ultralytics.data.dataset import YOLODatasetder
 from ultralytics.utils.torch_utils import de_parallel
 from utils.distill import apply_distillation
 from utils.data_utils import create_data_yaml
@@ -42,71 +42,71 @@ def parse_args():
 
 
 def create_data_loaders(data_yaml_path, batch_size, img_size, device):
-    """Create custom data loaders from YOLO format data"""
+    """Create custom data loaders from YOLO format data"""ing YOLO's built-in utilities"""
     with open(data_yaml_path, 'r') as f:
         data_dict = yaml.safe_load(f)
+        with open(data_yaml_path, 'r') as f:
+            data_dict = yaml.safe_load(f)
+        
+        # Create data loaders using YOLO's built-in functions
+        # which handle all the dataset creation and preprocessing
+        print("Building training dataloader...")
+        train_loader = build_dataloader(
+            path=data_dict.get('train'),
+            imgsz=img_size,
+            batch_size=batch_size,
+            stride=32,  # Default YOLO stride
+            hyp=None,  # Use default hyperparameters
+            augment=True,
+            cache=False,
+            pad=0.0,
+            rect=False,
+            workers=4,
+            prefix="train: ",
+            shuffle=True,
+            seed=0
+        )[0]  # Return just the dataloader
+        
+        print("Building validation dataloader...")
+        val_loader = build_dataloader(
+            path=data_dict.get('val'),
+            imgsz=img_size,
+            batch_size=batch_size,
+            stride=32,
+            hyp=None,
+            augment=False,
+            cache=False,
+            pad=0.0,
+            rect=True,
+            workers=4,
+            prefix="val: ",
+            shuffle=False,
+            seed=0
+        )[0]  # Return just the dataloader
+        
+        print(f"Created dataloaders: {len(train_loader)} training batches, {len(val_loader)} validation batches")
+        return train_loader, val_loader
     
-    # Create train and val datasets
-    train_data = YOLODataset(
-        img_path=data_dict.get('train', ''),
-        imgsz=img_size,
-        augment=True,
-        cache=False
-    )
-    
-    val_data = YOLODataset(
-        img_path=data_dict.get('val', ''),
-        imgsz=img_size,
-        augment=False,
-        cache=False
-    )
-    
-    # Create data loaders
-    train_loader = DataLoader(
-        train_data,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=4,
-        pin_memory=True,
-        collate_fn=train_data.collate_fn
-    )
-    
-    val_loader = DataLoader(
-        val_data,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True,
-        collate_fn=val_data.collate_fn
-    )
-    
-    return train_loader, val_loader
+    except Exception as e:
+        print(f"Error creating data loaders: {e}")
+        # Try a fallback approach by loading the model with the data config and extracting its dataloaders
+        print("Attempting fallback data loading method...")
+        try:
+            # Create a temporary model to get dataloaders
+            temp_model = YOLO('yolov8n.pt')
+            # Use YOLO's data loading mechanism
+            trainer = temp_model.trainer
+            trainer._setup_train(data=data_yaml_path, batch=batch_size, imgsz=img_size)
+            train_loader, val_loader = trainer.train_loader, trainer.validator.dataloader
+            print(f"Created dataloaders using fallback method: {len(train_loader)} training batches, {len(val_loader)} validation batches")
+            return train_loader, val_loader
+        except Exception as e2:
+            raise RuntimeError(f"Failed to create data loaders: {e2}. Original error: {e}")
 
 
 def train_with_distillation(args):
     """Train the model with knowledge distillation using custom training loop"""
     # Check if teacher model is specified
-    if not args.teacher_model:
-        raise ValueError("Teacher model path must be specified for distillation.")
-    
-    # Prepare data config
-    data_yaml_path = create_data_yaml(args.data_path)
-    
-    # Set device
-    device = torch.device(f"cuda:{args.device}" if args.device.isdigit() and torch.cuda.is_available() else "cpu")
-    
-    # Load the teacher and student models
-    print(f"Loading teacher model: {args.teacher_model}")
-    teacher_model = YOLO(args.teacher_model)
-    teacher_pytorch = teacher_model.model
-    teacher_pytorch.to(device).eval()  # Set teacher to eval mode
-    
-    print(f"Loading student model: {args.model}")
-    student_model = YOLO(args.model)
-    student_pytorch = student_model.model
-    student_pytorch.to(device).train()  # Set student to train mode
-    
-    # Create data loaders
     print("Creating data loaders...")
     train_loader, val_loader = create_data_loaders(data_yaml_path, args.batch_size, args.img_size, device)
     
@@ -280,9 +280,11 @@ def train_standard(args):
     """Train the model without knowledge distillation using custom training loop"""
     # Prepare data config
     data_yaml_path = create_data_yaml(args.data_path)
+    print(f"Using data config: {data_yaml_path}")
     
     # Set device
     device = torch.device(f"cuda:{args.device}" if args.device.isdigit() and torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
     
     # Load the model
     print(f"Loading model: {args.model}")
@@ -292,7 +294,20 @@ def train_standard(args):
     
     # Create data loaders
     print("Creating data loaders...")
-    train_loader, val_loader = create_data_loaders(data_yaml_path, args.batch_size, args.img_size, device)
+    try:
+        train_loader, val_loader = create_data_loaders(data_yaml_path, args.batch_size, args.img_size, device)
+    except Exception as e:
+        print(f"Failed to create custom data loaders: {e}")
+        print("Falling back to standard YOLO data loading...")
+        
+        # Initialize a temporary YOLO model to leverage its data loading utilities
+        temp_model = YOLO('yolov8n.pt')
+        # Start and immediately stop a training session to get initialized dataloaders
+        temp_trainer = temp_model.train(data=data_yaml_path, epochs=1, batch=args.batch_size, imgsz=args.img_size, device=args.device)
+        # Extract the dataloaders
+        train_loader = temp_trainer.train_loader
+        val_loader = temp_trainer.validator.dataloader
+        print(f"Using YOLO's built-in dataloaders: {len(train_loader)} training batches, {len(val_loader)} validation batches")
     
     # Define optimizer
     optimizer = torch.optim.Adam(pytorch_model.parameters(), lr=0.001)
