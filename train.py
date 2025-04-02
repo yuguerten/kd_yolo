@@ -43,10 +43,9 @@ def parse_args():
 
 def create_data_loaders(data_yaml_path, batch_size, img_size, device):
     """Create custom data loaders from YOLO format data"""
-    try:
-        # Load and validate the data YAML
-        with open(data_yaml_path, 'r') as f:
-            data_dict = yaml.safe_load(f)
+    # Load and validate the data YAML
+    with open(data_yaml_path, 'r') as f:
+        data_dict = yaml.safe_load(f)
         
         # Print diagnostic information
         print(f"\nLoading dataset from configuration: {data_yaml_path}")
