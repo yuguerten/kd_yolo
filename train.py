@@ -3,6 +3,7 @@ import argparse
 import yaml
 from pathlib import Path
 import torch
+import csv
 from ultralytics import YOLO
 from utils.distill import apply_distillation
 from utils.data_utils import create_data_yaml
@@ -65,6 +66,18 @@ def train_with_distillation(args):
             
             # Pre-process the student model for training (make it ready to accept our custom loss)
             self.student_model.add_callback("on_train_batch_end", self._on_batch_end_callback)
+            self.student_model.add_callback("on_train_epoch_end", self._on_epoch_end_callback)
+            
+            # Create CSV file for logging metrics
+            self.csv_path = Path(self.args.project) / f"{self.args.name}_distill" / "metrics.csv"
+            os.makedirs(os.path.dirname(self.csv_path), exist_ok=True)
+            
+            # Initialize CSV with headers
+            with open(self.csv_path, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Epoch', 'mAP50', 'mAP50-95', 'Precision', 'Recall', 
+                                'Box Loss', 'Cls Loss', 'Obj Loss', 'KD Loss', 
+                                'Student Loss', 'Teacher mAP50', 'Teacher mAP50-95'])
         
         def _on_batch_end_callback(self, trainer):
             """Custom callback to modify training process for distillation"""
@@ -74,6 +87,53 @@ def train_with_distillation(args):
                 for name, value in trainer.distill_loss_dict.items():
                     if isinstance(value, torch.Tensor):
                         trainer.metrics[name] = value.item()
+        
+        def _on_epoch_end_callback(self, trainer):
+            """Save metrics at the end of each epoch"""
+            # Extract metrics
+            epoch = trainer.epoch
+            metrics = trainer.metrics
+            
+            # Calculate teacher model performance on validation set
+            val_loader = trainer.validator.dataloader
+            teacher_metrics = self._evaluate_teacher(val_loader)
+            
+            # Prepare metric values for CSV
+            row = [
+                epoch,
+                metrics.get('metrics/mAP50(B)', 0),
+                metrics.get('metrics/mAP50-95(B)', 0),
+                metrics.get('metrics/precision(B)', 0),
+                metrics.get('metrics/recall(B)', 0),
+                metrics.get('train/box_loss', 0),
+                metrics.get('train/cls_loss', 0),
+                metrics.get('train/dfl_loss', 0),  # Object loss
+                metrics.get('kd_loss', 0),
+                metrics.get('student_loss', 0),
+                teacher_metrics.get('mAP50', 0),
+                teacher_metrics.get('mAP50-95', 0)
+            ]
+            
+            # Save to CSV
+            with open(self.csv_path, 'a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(row)
+            
+            print(f"Epoch {epoch}: Student mAP50: {row[1]:.4f}, Teacher mAP50: {row[9]:.4f}, KD Loss: {row[7]:.4f}")
+        
+        def _evaluate_teacher(self, dataloader):
+            """Evaluate teacher model on validation set"""
+            metrics = {}
+            try:
+                # Run validation on teacher model
+                results = self.teacher_model.val(data=dataloader)
+                # Extract metrics
+                metrics['mAP50'] = results.box.map50
+                metrics['mAP50-95'] = results.box.map
+            except Exception as e:
+                print(f"Error evaluating teacher model: {e}")
+            
+            return metrics
         
         def train(self):
             """Start training with knowledge distillation"""
@@ -132,6 +192,7 @@ def train_with_distillation(args):
                 resume=self.args.resume
             )
             
+            print(f"Training completed. Metrics saved to {self.csv_path}")
             return results
     
     # Create trainer and start training
@@ -150,6 +211,41 @@ def train_standard(args):
     print(f"Loading model: {args.model}")
     model = YOLO(args.model)
     
+    # Setup CSV logging for standard training
+    csv_path = Path(args.project) / args.name / "metrics.csv"
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+    
+    # Initialize CSV with headers
+    with open(csv_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Epoch', 'mAP50', 'mAP50-95', 'Precision', 'Recall', 
+                        'Box Loss', 'Cls Loss', 'Obj Loss'])
+    
+    # Add epoch end callback for logging
+    def on_epoch_end(trainer):
+        metrics = trainer.metrics
+        epoch = trainer.epoch
+        
+        # Prepare row for CSV
+        row = [
+            epoch,
+            metrics.get('metrics/mAP50(B)', 0),
+            metrics.get('metrics/mAP50-95(B)', 0),
+            metrics.get('metrics/precision(B)', 0),
+            metrics.get('metrics/recall(B)', 0),
+            metrics.get('train/box_loss', 0),
+            metrics.get('train/cls_loss', 0),
+            metrics.get('train/dfl_loss', 0)  # Object loss
+        ]
+        
+        # Save to CSV
+        with open(csv_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(row)
+    
+    # Add the callback
+    model.add_callback("on_train_epoch_end", on_epoch_end)
+    
     # Train the model using standard YOLO training
     results = model.train(
         data=data_yaml_path,
@@ -162,6 +258,7 @@ def train_standard(args):
         resume=args.resume
     )
     
+    print(f"Training completed. Metrics saved to {csv_path}")
     return results
 
 
